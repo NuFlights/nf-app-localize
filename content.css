@@ -1,0 +1,18 @@
+/* Translatable element indicators — injected by the Translation Review extension */
+
+[data-i18n].trt-i18n-element {
+  outline: 1px dashed rgba(37, 99, 235, 0.45) !important;
+  outline-offset: 2px !important;
+  cursor: crosshair !important;
+  transition: outline 0.12s ease, background-color 0.12s ease !important;
+}
+
+[data-i18n].trt-i18n-hover {
+  outline: 2px solid rgba(37, 99, 235, 0.85) !important;
+  background-color: rgba(37, 99, 235, 0.06) !important;
+}
+
+[data-i18n].trt-i18n-selected {
+  outline: 2px solid #2563eb !important;
+  background-color: rgba(37, 99, 235, 0.1) !important;
+}

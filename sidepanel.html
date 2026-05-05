@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Translation Review</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+<div class="panel">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <div class="header">
+    <div class="header-left">
+      <svg class="header-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z" fill="white"/>
+      </svg>
+      <div>
+        <div class="header-title">Translation Review</div>
+        <div class="header-sub">French — Nuflights QA</div>
+      </div>
+    </div>
+    <label class="toggle-wrap" title="Toggle highlight mode">
+      <input type="checkbox" id="highlightToggle" checked>
+      <div class="toggle-track"></div>
+      <span>Highlight</span>
+    </label>
+  </div>
+
+  <!-- ── Tabs ───────────────────────────────────────────────── -->
+  <div class="tabs">
+    <button class="tab-btn active" data-pane="reviewPane">Review</button>
+    <button class="tab-btn" data-pane="historyPane">History</button>
+  </div>
+
+  <!-- ── Review Pane ─────────────────────────────────────────── -->
+  <div id="reviewPane" class="pane active">
+
+    <!-- Empty state -->
+    <div id="reviewEmpty" class="empty">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">No element selected</div>
+      <div class="empty-desc">
+        Click on any highlighted text on the page to open it here for review.
+        <br><br>
+        Import your translations file so reference text appears alongside each element.
+      </div>
+      <button id="importBtnReview" class="btn btn-outline">⬆ Import Translations JSON</button>
+      <input type="file" id="importFileReview" accept=".json" class="hidden">
+    </div>
+
+    <!-- Review form -->
+    <div id="reviewForm" class="hidden">
+
+      <div class="key-badge">
+        <span class="key-label">KEY</span>
+        <span id="rvKey" class="key-value"></span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Current text on page</label>
+        <div id="rvCurrentText" class="field-box"></div>
+      </div>
+
+      <div class="field" id="rvRefRow">
+        <label class="field-label">Reference (imported)</label>
+        <div id="rvRefText" class="field-box ref"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Status</label>
+        <span id="rvStatus" class="badge badge-pending">Pending</span>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="action-row">
+        <button id="btnApprove"   class="btn btn-approve">✅ Approve</button>
+        <button id="btnSuggest"   class="btn btn-suggest">✏️ Suggest</button>
+        <button id="btnIssue"     class="btn btn-issue">❌ Issue</button>
+      </div>
+
+      <!-- Suggestion input (shown when Suggest / Issue clicked) -->
+      <div id="rvSuggestRow" class="field hidden">
+        <label class="field-label" id="rvSuggestLabel">Suggested correction</label>
+        <textarea id="rvSuggestText" class="field-textarea"
+                  placeholder="Enter the correct French translation…"></textarea>
+      </div>
+
+      <div id="rvNoteRow" class="field hidden">
+        <label class="field-label">Note (optional)</label>
+        <textarea id="rvNoteText" class="field-textarea" rows="2"
+                  placeholder="Describe the issue…"></textarea>
+      </div>
+
+      <button id="btnSubmit" class="btn btn-primary hidden" style="margin-top:10px">
+        Save Review
+      </button>
+
+      <div id="rvToast" class="hidden"></div>
+    </div>
+  </div>
+
+  <!-- ── History Pane ─────────────────────────────────────────── -->
+  <div id="historyPane" class="pane">
+
+    <div class="history-controls">
+      <input type="text" id="searchBox" class="search-box" placeholder="Search by key…">
+      <div class="chips">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="approved">Approved</button>
+        <button class="chip" data-filter="suggested">Suggested</button>
+        <button class="chip" data-filter="needs_review">Issue</button>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-box stat-approved">
+        <span id="stApproved" class="stat-num">0</span>Approved
+      </div>
+      <div class="stat-box stat-suggested">
+        <span id="stSuggested" class="stat-num">0</span>Suggested
+      </div>
+      <div class="stat-box stat-issue">
+        <span id="stIssue" class="stat-num">0</span>Issues
+      </div>
+      <div class="stat-box stat-total">
+        <span id="stTotal" class="stat-num">0</span>Total
+      </div>
+    </div>
+
+    <div id="reviewList" class="review-list"></div>
+    <div id="listEmpty" class="list-empty hidden">No entries match the current filter.</div>
+
+    <div class="export-bar">
+      <button id="exportJson" class="btn btn-outline btn-sm">⬇ JSON</button>
+      <button id="exportCsv"  class="btn btn-outline btn-sm">⬇ CSV</button>
+      <button id="importBtnHistory" class="btn btn-outline btn-sm">⬆ Import</button>
+      <input type="file" id="importFileHistory" accept=".json" class="hidden">
+      <button id="clearAll" class="btn btn-danger btn-sm" style="margin-left:auto">🗑 Clear all</button>
+    </div>
+  </div>
+
+</div>
+<script src="sidepanel.js"></script>
+</body>
+</html>
