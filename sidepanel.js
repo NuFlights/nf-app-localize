@@ -2,13 +2,15 @@
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let reviews       = {};
-let translations  = {};
-let currentEl     = null;
-let pendingAction = null;
-let historyFilter = 'all';
-let currentLocale = null;
-let currentOrigin = null;
+let reviews            = {};
+let translations       = {};   // reference (fr.json / imported)
+let englishTranslations = {};  // english source (en.json)
+let currentEl          = null;
+let pendingAction      = null;
+let historyFilter      = 'all';
+let currentLocale      = null;
+let currentOrigin      = null;
+const drafts           = {};   // in-memory draft text { [key]: { text, note } }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -31,9 +33,15 @@ const fetchUrl    = $('fetchUrl');
 const fetchingUrl = $('fetchingUrl');
 const errorMsg    = $('errorMsg');
 
+// Review pane
 const reviewEmpty    = $('reviewEmpty');
 const reviewForm     = $('reviewForm');
+const navProgress    = $('navProgress');
+const btnPrev        = $('btnPrev');
+const btnNext        = $('btnNext');
 const rvKey          = $('rvKey');
+const rvEnRow        = $('rvEnRow');
+const rvEnText       = $('rvEnText');
 const rvCurrentText  = $('rvCurrentText');
 const rvRefRow       = $('rvRefRow');
 const rvRefText      = $('rvRefText');
@@ -43,12 +51,12 @@ const rvSuggestLabel = $('rvSuggestLabel');
 const rvSuggestText  = $('rvSuggestText');
 const rvNoteRow      = $('rvNoteRow');
 const rvNoteText     = $('rvNoteText');
-const btnApprove     = $('btnApprove');
 const btnSuggest     = $('btnSuggest');
 const btnIssue       = $('btnIssue');
 const btnSubmit      = $('btnSubmit');
 const rvToast        = $('rvToast');
 
+// History pane
 const searchBox   = $('searchBox');
 const reviewList  = $('reviewList');
 const listEmpty   = $('listEmpty');
@@ -98,8 +106,8 @@ function getLocaleName(code) {
   return code ? (LOCALE_NAMES[code] || code.toUpperCase()) : 'Unknown';
 }
 
-const STATUS_LABELS = { pending: 'Pending', approved: 'Approved', suggested: 'Suggested', needs_review: 'Issue' };
-const STATUS_BADGE  = { pending: 'badge-pending', approved: 'badge-approved', suggested: 'badge-suggested', needs_review: 'badge-needs_review' };
+const STATUS_LABELS = { pending: 'Pending', suggested: 'Suggested', needs_review: 'Issue' };
+const STATUS_BADGE  = { pending: 'badge-pending', suggested: 'badge-suggested', needs_review: 'badge-needs_review' };
 
 function fmtStatus(s) { return STATUS_LABELS[s] ?? s; }
 
@@ -131,37 +139,37 @@ function setupStartScreen(locale, origin) {
   mainScreen.style.display = 'none';
   startScreen.style.display = '';
 
-  // file:// page — can't auto-fetch
-  if (origin === 'file://') {
-    showState(stFileLocal);
-    return;
-  }
+  if (origin === 'file://') { showState(stFileLocal); return; }
+  if (!locale)              { showState(stNoLocale);  return; }
 
-  // No locale detected on the page
-  if (!locale) {
-    showState(stNoLocale);
-    return;
-  }
-
-  // Happy path — show locale + fetch URL
-  const name = getLocaleName(locale);
-  localeName.textContent = `${name} (${locale})`;
+  localeName.textContent = `${getLocaleName(locale)} (${locale})`;
   fetchUrl.textContent   = `${origin}/locales/${locale}.json`;
   showState(stReady);
 }
 
-function activateSession(flat) {
+async function activateSession(flat) {
   translations = flat;
-  storageSet({ translations: flat });
+  await storageSet({ translations: flat });
 
-  // Send to the active tab's content script
+  // Also try to fetch English source in the background (non-blocking)
+  if (currentOrigin && currentOrigin !== 'file://' && currentLocale && currentLocale !== 'en') {
+    fetch(`${currentOrigin}/locales/en.json`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json) {
+          englishTranslations = flattenObject(json);
+          storageSet({ englishTranslations: englishTranslations });
+        }
+      })
+      .catch(() => {});
+  }
+
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'START_SESSION', translations: flat }).catch(() => {});
     }
   });
 
-  // Show locale badge in header
   if (currentLocale) {
     localePill.textContent = `${getLocaleName(currentLocale)} · ${currentLocale.toUpperCase()}`;
     show(localePill);
@@ -171,17 +179,27 @@ function activateSession(flat) {
   mainScreen.style.display  = 'flex';
 }
 
+// ── Navigation helpers ────────────────────────────────────────────────────────
+
+function sendNavigate(direction) {
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'NAVIGATE', direction, skipKeys: [] }).catch(() => {});
+    }
+  });
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function load() {
-  const data = await storageGet(['reviews', 'translations', 'detectedLocale', 'pageOrigin']);
-  reviews      = data.reviews      || {};
-  translations = data.translations || {};
+  const data = await storageGet(['reviews', 'translations', 'englishTranslations', 'detectedLocale', 'pageOrigin']);
+  reviews             = data.reviews             || {};
+  translations        = data.translations        || {};
+  englishTranslations = data.englishTranslations || {};
 
   renderHistory();
   updateStats();
 
-  // detectedLocale === undefined means content script hasn't run yet
   if (data.detectedLocale === undefined) {
     showState(stDetecting);
   } else {
@@ -199,7 +217,20 @@ chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'ELEMENT_SELECTED') {
     currentEl = message.data;
     showReviewForm(currentEl);
+    // Update progress counter
+    if (message.data.total) {
+      navProgress.textContent = `${message.data.index + 1} / ${message.data.total}`;
+    }
     if (!$('reviewPane').classList.contains('active')) activateTab('reviewPane');
+  }
+
+  if (message.type === 'NAV_BOUNDARY') {
+    showToast(
+      message.boundary === 'end'
+        ? "You've reached the last element"
+        : "You're at the first element",
+      false
+    );
   }
 });
 
@@ -207,18 +238,14 @@ chrome.runtime.onMessage.addListener(message => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.reviews)      { reviews = changes.reviews.newValue || {}; renderHistory(); updateStats(); }
-  if (changes.translations) { translations = changes.translations.newValue || {}; }
+  if (changes.reviews)             { reviews = changes.reviews.newValue || {}; renderHistory(); updateStats(); }
+  if (changes.translations)        { translations = changes.translations.newValue || {}; }
+  if (changes.englishTranslations) { englishTranslations = changes.englishTranslations.newValue || {}; }
 
-  // Content script wrote locale info — update start screen if session not active
   if ((changes.detectedLocale !== undefined || changes.pageOrigin !== undefined)
       && mainScreen.style.display !== 'flex') {
-    const locale = changes.detectedLocale !== undefined
-      ? changes.detectedLocale.newValue
-      : currentLocale;
-    const origin = changes.pageOrigin !== undefined
-      ? changes.pageOrigin.newValue
-      : currentOrigin;
+    const locale = changes.detectedLocale !== undefined ? changes.detectedLocale.newValue : currentLocale;
+    const origin = changes.pageOrigin     !== undefined ? changes.pageOrigin.newValue     : currentOrigin;
     setupStartScreen(locale, origin);
   }
 });
@@ -246,7 +273,7 @@ $('btnStart').addEventListener('click', async () => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    activateSession(flattenObject(json));
+    await activateSession(flattenObject(json));
   } catch {
     errorMsg.textContent = `Could not load translations from:\n${currentOrigin}/locales/${currentLocale}.json`;
     showState(stError);
@@ -267,8 +294,7 @@ function setupImport(btnId, fileId, onLoaded) {
     const f = e.target.files[0];
     if (!f) return;
     try {
-      const flat = flattenObject(JSON.parse(await f.text()));
-      onLoaded(flat);
+      await onLoaded(flattenObject(JSON.parse(await f.text())));
     } catch {
       showToast('Invalid JSON file', false);
     }
@@ -276,18 +302,42 @@ function setupImport(btnId, fileId, onLoaded) {
   });
 }
 
-// Start-screen imports → start session
 const onManualImport = flat => activateSession(flat);
 setupImport('importBtnStart',    'importFileStart',    onManualImport);
 setupImport('importBtnLocal',    'importFileLocal',    onManualImport);
 setupImport('importBtnNoLocale', 'importFileNoLocale', onManualImport);
 setupImport('importBtnError',    'importFileError',    onManualImport);
 
-// Mid-session import (history tab) → update reference translations only
 setupImport('importBtnHistory', 'importFileHistory', flat => {
   translations = flat;
   storageSet({ translations: flat });
   showToast(`Imported ${Object.keys(flat).length} keys`);
+});
+
+// ── Navigation buttons ────────────────────────────────────────────────────────
+
+btnPrev.addEventListener('click', () => sendNavigate('prev'));
+btnNext.addEventListener('click', () => sendNavigate('next'));
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if (mainScreen.style.display !== 'flex') return;
+
+  const inInput = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
+
+  // Ctrl/Cmd+Enter submits from anywhere
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (!btnSubmit.classList.contains('hidden')) btnSubmit.click();
+    return;
+  }
+
+  // Arrow keys navigate only when not typing
+  if (!inInput) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); sendNavigate('next'); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); sendNavigate('prev'); }
+  }
 });
 
 // ── Review form ───────────────────────────────────────────────────────────────
@@ -299,23 +349,56 @@ function showReviewForm(el) {
   rvKey.textContent         = el.key;
   rvCurrentText.textContent = el.currentText;
 
+  // English source
+  const enText = englishTranslations[el.key] || '';
+  if (enText) { rvEnText.textContent = enText; show(rvEnRow); } else { hide(rvEnRow); }
+
+  // Expected translation reference
   const ref = el.referenceTranslation || translations[el.key] || '';
   if (ref) { rvRefText.textContent = ref; show(rvRefRow); } else { hide(rvRefRow); }
 
+  // Load existing review or draft
   const existing = reviews[el.key];
+  const draft    = drafts[el.key];
+
+  pendingAction = null;
+  hide(rvSuggestRow); hide(rvNoteRow); hide(btnSubmit); hide(rvToast);
+  [btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
+
   if (existing) {
     setStatusBadge(existing.status);
     rvSuggestText.value = existing.suggestedText || '';
     rvNoteText.value    = existing.note || '';
+
+    // Re-show the saved values so the reviewer can see / edit them
+    if (existing.status === 'suggested') {
+      pendingAction = 'suggested';
+      rvSuggestLabel.textContent = 'Corrected translation';
+      btnSuggest.classList.add('active');
+      show(rvSuggestRow);
+      show(btnSubmit);
+    } else if (existing.status === 'needs_review') {
+      pendingAction = 'needs_review';
+      rvSuggestLabel.textContent = 'Corrected text (optional)';
+      btnIssue.classList.add('active');
+      show(rvSuggestRow);
+      show(rvNoteRow);
+      show(btnSubmit);
+    }
+  } else if (draft?.text) {
+    setStatusBadge('pending');
+    rvSuggestText.value = draft.text;
+    rvNoteText.value    = draft.note || '';
+    // Restore suggest UI for the draft
+    pendingAction = 'suggested';
+    rvSuggestLabel.textContent = 'Corrected translation';
+    btnSuggest.classList.add('active');
+    show(rvSuggestRow); show(btnSubmit);
   } else {
     setStatusBadge('pending');
     rvSuggestText.value = '';
     rvNoteText.value    = '';
   }
-
-  pendingAction = null;
-  hide(rvSuggestRow); hide(rvNoteRow); hide(btnSubmit); hide(rvToast);
-  [btnApprove, btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
 }
 
 function setStatusBadge(status) {
@@ -323,16 +406,21 @@ function setStatusBadge(status) {
   rvStatus.className   = `badge ${STATUS_BADGE[status] || 'badge-pending'}`;
 }
 
-// ── Action buttons ────────────────────────────────────────────────────────────
+// ── Auto-save draft while typing ──────────────────────────────────────────────
 
-btnApprove.addEventListener('click', () => {
-  activateAction('approved');
-  saveReview('approved', null, null);
+rvSuggestText.addEventListener('input', () => {
+  if (currentEl) drafts[currentEl.key] = { ...(drafts[currentEl.key] || {}), text: rvSuggestText.value };
 });
+
+rvNoteText.addEventListener('input', () => {
+  if (currentEl) drafts[currentEl.key] = { ...(drafts[currentEl.key] || {}), note: rvNoteText.value };
+});
+
+// ── Action buttons ────────────────────────────────────────────────────────────
 
 btnSuggest.addEventListener('click', () => {
   activateAction('suggested');
-  rvSuggestLabel.textContent = 'Suggested correction';
+  rvSuggestLabel.textContent = 'Corrected translation';
   show(rvSuggestRow); hide(rvNoteRow); show(btnSubmit);
   rvSuggestText.focus();
 });
@@ -359,8 +447,8 @@ btnSubmit.addEventListener('click', () => {
 
 function activateAction(action) {
   pendingAction = action;
-  [btnApprove, btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
-  ({ approved: btnApprove, suggested: btnSuggest, needs_review: btnIssue })[action]?.classList.add('active');
+  [btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
+  ({ suggested: btnSuggest, needs_review: btnIssue })[action]?.classList.add('active');
 }
 
 async function saveReview(status, suggestedText, note) {
@@ -371,11 +459,16 @@ async function saveReview(status, suggestedText, note) {
     timestamp: new Date().toISOString(),
   };
   await storageSet({ reviews });
+  delete drafts[currentEl.key];
+
   setStatusBadge(status);
   hide(rvSuggestRow); hide(rvNoteRow); hide(btnSubmit);
-  [btnApprove, btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
+  [btnSuggest, btnIssue].forEach(b => b.classList.remove('active'));
   pendingAction = null;
   showToast(`Saved as "${fmtStatus(status)}"`);
+
+  // Auto-advance to next unreviewed element after saving
+  setTimeout(() => sendNavigate('next'), 700);
 }
 
 // ── History ───────────────────────────────────────────────────────────────────

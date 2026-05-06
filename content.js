@@ -1,7 +1,9 @@
 'use strict';
 
-let sessionActive = false;
+let sessionActive  = false;
 let selectedElement = null;
+let elements       = [];   // ordered list of all attached i18n elements in the DOM
+let currentIndex   = -1;
 let translationsCache = {};
 
 function storageGet(keys) {
@@ -9,15 +11,12 @@ function storageGet(keys) {
 }
 
 function detectLocale() {
-  // 1. HTML lang attribute — most reliable
   const lang = document.documentElement.lang;
   if (lang) return lang.split('-')[0].toLowerCase();
 
-  // 2. URL path segment e.g. /fr/, /en-US/
   const pathMatch = window.location.pathname.match(/^\/([a-z]{2})(?:[-_][a-z]{2})?\//i);
   if (pathMatch) return pathMatch[1].toLowerCase();
 
-  // 3. Query param ?lang=fr / ?locale=fr / ?lng=fr
   const p = new URLSearchParams(window.location.search);
   const qp = p.get('lang') || p.get('locale') || p.get('lng');
   if (qp) return qp.split('-')[0].toLowerCase();
@@ -30,16 +29,18 @@ async function init() {
   translationsCache = translations || {};
 
   const locale = detectLocale();
-  // Use sentinel 'file://' so side panel can distinguish from a real origin being null
   const origin = window.location.protocol === 'file:' ? 'file://' : window.location.origin;
 
   chrome.storage.local.set({ detectedLocale: locale, pageOrigin: origin });
   chrome.runtime.sendMessage({ type: 'LOCALE_DETECTED', locale, origin }).catch(() => {});
 }
 
+// ── Element attachment ────────────────────────────────────────────────────────
+
 function scanAndAttach(root) {
   root.querySelectorAll('[data-i18n]').forEach(attachEl);
   if (root.dataset?.i18n) attachEl(root);
+  rebuildElements();
 }
 
 function attachEl(el) {
@@ -51,16 +52,30 @@ function attachEl(el) {
   el.addEventListener('click', onClick, true);
 }
 
+function rebuildElements() {
+  // Maintain DOM order
+  elements = Array.from(document.querySelectorAll('[data-i18n][data-trt-attached="1"]'));
+}
+
+// ── Click handler ─────────────────────────────────────────────────────────────
+
 function onClick(e) {
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
 
   const el = e.currentTarget;
+  selectElement(el);
+}
+
+function selectElement(el) {
   selectedElement?.classList.remove('trt-i18n-selected');
   selectedElement = el;
   el.classList.add('trt-i18n-selected');
   el.classList.remove('trt-i18n-hover');
+
+  const idx = elements.indexOf(el);
+  if (idx !== -1) currentIndex = idx;
 
   chrome.runtime.sendMessage({
     type: 'ELEMENT_SELECTED',
@@ -70,16 +85,56 @@ function onClick(e) {
       referenceTranslation: translationsCache[el.dataset.i18n] || '',
       url: window.location.href,
       timestamp: Date.now(),
+      index: currentIndex,
+      total: elements.length,
     },
   }).catch(() => {});
 }
 
+// ── Navigate to element by index ──────────────────────────────────────────────
+
+function navigateTo(idx) {
+  if (idx < 0) {
+    chrome.runtime.sendMessage({ type: 'NAV_BOUNDARY', boundary: 'start' }).catch(() => {});
+    return;
+  }
+  if (idx >= elements.length) {
+    chrome.runtime.sendMessage({ type: 'NAV_BOUNDARY', boundary: 'end' }).catch(() => {});
+    return;
+  }
+
+  currentIndex = idx;
+  const el = elements[idx];
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  selectElement(el);
+}
+
+// ── Message listener ──────────────────────────────────────────────────────────
+
 chrome.runtime.onMessage.addListener(msg => {
-  if (msg.type !== 'START_SESSION') return;
-  if (msg.translations) translationsCache = msg.translations;
-  sessionActive = true;
-  scanAndAttach(document.documentElement);
+  if (msg.type === 'START_SESSION') {
+    if (msg.translations) translationsCache = msg.translations;
+    sessionActive = true;
+    scanAndAttach(document.documentElement);
+    // Auto-open first element
+    if (elements.length > 0) navigateTo(0);
+  }
+
+  if (msg.type === 'NAVIGATE') {
+    const skipSet = new Set(msg.skipKeys || []);
+    const step = msg.direction === 'next' ? 1 : -1;
+    let idx = currentIndex + step;
+
+    // Skip already-reviewed keys
+    while (idx >= 0 && idx < elements.length && skipSet.has(elements[idx].dataset.i18n)) {
+      idx += step;
+    }
+
+    navigateTo(idx);
+  }
 });
+
+// ── Storage / mutation listeners ──────────────────────────────────────────────
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.translations) {
@@ -89,11 +144,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 new MutationObserver(mutations => {
   if (!sessionActive) return;
+  let added = false;
   for (const { addedNodes } of mutations) {
     for (const node of addedNodes) {
-      if (node.nodeType === Node.ELEMENT_NODE) scanAndAttach(node);
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        scanAndAttach(node);
+        added = true;
+      }
     }
   }
+  if (added) rebuildElements();
 }).observe(document.documentElement, { childList: true, subtree: true });
 
 init();

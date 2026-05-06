@@ -102,18 +102,29 @@
 
       <div id="reviewForm" class="hidden">
 
+        <div class="nav-bar">
+          <button id="btnPrev" class="btn btn-nav">← Prev</button>
+          <span id="navProgress" class="nav-progress">— / —</span>
+          <button id="btnNext" class="btn btn-nav">Next →</button>
+        </div>
+
         <div class="key-badge">
           <span class="key-label">KEY</span>
           <span id="rvKey" class="key-value"></span>
         </div>
 
+        <div class="field" id="rvEnRow">
+          <label class="field-label">🇬🇧 English (source)</label>
+          <div id="rvEnText" class="field-box en-source"></div>
+        </div>
+
         <div class="field">
-          <label class="field-label">Current text on page</label>
+          <label class="field-label">🇫🇷 Current text on page</label>
           <div id="rvCurrentText" class="field-box"></div>
         </div>
 
         <div class="field" id="rvRefRow">
-          <label class="field-label">Reference (imported)</label>
+          <label class="field-label">Expected translation</label>
           <div id="rvRefText" class="field-box ref"></div>
         </div>
 
@@ -123,14 +134,13 @@
         </div>
 
         <div class="action-row">
-          <button id="btnApprove" class="btn btn-approve">✅ Approve</button>
-          <button id="btnSuggest" class="btn btn-suggest">✏️ Suggest</button>
-          <button id="btnIssue"   class="btn btn-issue">❌ Issue</button>
+          <button id="btnSuggest" class="btn btn-suggest">✏️ Suggest Change</button>
+          <button id="btnIssue"   class="btn btn-issue">❌ Mark as Issue</button>
         </div>
 
         <div id="rvSuggestRow" class="field hidden">
-          <label class="field-label" id="rvSuggestLabel">Suggested correction</label>
-          <textarea id="rvSuggestText" class="field-textarea" placeholder="Enter the correct French translation…"></textarea>
+          <label class="field-label" id="rvSuggestLabel">Corrected translation</label>
+          <textarea id="rvSuggestText" class="field-textarea" placeholder="Enter the correct translation…"></textarea>
         </div>
 
         <div id="rvNoteRow" class="field hidden">
@@ -138,7 +148,7 @@
           <textarea id="rvNoteText" class="field-textarea" rows="2" placeholder="Describe the issue…"></textarea>
         </div>
 
-        <button id="btnSubmit" class="btn btn-primary hidden" style="margin-top:10px">Save Review</button>
+        <button id="btnSubmit" class="btn btn-primary hidden" style="margin-top:10px">Save Review <kbd>⌘↵</kbd></button>
         <div id="rvToast" class="hidden"></div>
 
       </div>

@@ -456,6 +456,59 @@ body {
 
 .hidden { display: none !important; }
 
+/* ── Nav bar (Prev / Progress / Next) ── */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.btn-nav {
+  background: #fff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.btn-nav:hover { background: #eff6ff; }
+
+.nav-progress {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.3px;
+}
+
+/* ── English source field ── */
+.field-box.en-source {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+  font-style: normal;
+}
+
+/* ── kbd hint on submit button ── */
+kbd {
+  font-size: 10px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: inherit;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
 /* ── Screen containers ── */
 #startScreen {
   flex: 1;
