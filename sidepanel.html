@@ -33,6 +33,7 @@
         If this doesn't update, the extension may not be active on this page.<br><br>
         Try: <strong>reload the extension</strong> at <code>chrome://extensions</code>, then <strong>refresh the page</strong>.
       </div>
+      <button id="btnRedetect" class="btn btn-outline sp-btn-full" style="margin-top:12px">🔄 Re-detect Language</button>
     </div>
 
     <div id="stReady" class="state-panel hidden">
@@ -47,6 +48,7 @@
       <div class="sp-or">or</div>
       <button id="importBtnStart" class="btn btn-outline sp-btn-full">Import JSON manually</button>
       <input type="file" id="importFileStart" accept=".json" class="hidden">
+      <button id="btnRedetectReady" class="btn btn-ghost sp-btn-full" style="margin-top:8px">🔄 Re-detect Language</button>
     </div>
 
     <div id="stFileLocal" class="state-panel hidden">
@@ -85,6 +87,13 @@
 
   <!-- ── Main Screen (session active) ────────────────────────────── -->
   <div id="mainScreen" style="display:none">
+
+    <!-- Language change banner (SPA locale switch during active session) -->
+    <div id="langChangeBanner" class="lang-change-banner hidden">
+      <span id="langBannerText">Language changed</span>
+      <button id="btnRefreshSession" class="btn-banner-refresh">Refresh Session</button>
+      <button id="btnBannerDismiss" class="btn-banner-dismiss">✕</button>
+    </div>
 
     <div class="tabs">
       <button class="tab-btn active" data-pane="reviewPane">Translation</button>

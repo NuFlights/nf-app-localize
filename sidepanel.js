@@ -229,7 +229,18 @@ async function load() {
 
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'LOCALE_DETECTED') {
-    setupStartScreen(message.locale, message.origin);
+    if (mainScreen.style.display === 'flex') {
+      // Session is active — show banner if locale actually changed
+      if (message.locale && message.locale !== currentLocale) {
+        currentLocale = message.locale;
+        currentOrigin = message.origin;
+        $('langBannerText').textContent =
+          `Language changed to ${getLocaleName(message.locale)} (${message.locale.toUpperCase()}) — refresh to start a new session.`;
+        show($('langChangeBanner'));
+      }
+    } else {
+      setupStartScreen(message.locale, message.origin);
+    }
   }
 
   if (message.type === 'ELEMENT_SELECTED') {
@@ -260,11 +271,21 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.translations)        { translations = changes.translations.newValue || {}; }
   if (changes.englishTranslations) { englishTranslations = changes.englishTranslations.newValue || {}; }
 
-  if ((changes.detectedLocale !== undefined || changes.pageOrigin !== undefined)
-      && mainScreen.style.display !== 'flex') {
+  if (changes.detectedLocale !== undefined || changes.pageOrigin !== undefined) {
     const locale = changes.detectedLocale !== undefined ? changes.detectedLocale.newValue : currentLocale;
     const origin = changes.pageOrigin     !== undefined ? changes.pageOrigin.newValue     : currentOrigin;
-    setupStartScreen(locale, origin);
+    if (mainScreen.style.display === 'flex') {
+      // Session active — show banner only if locale actually changed
+      if (locale && locale !== currentLocale) {
+        currentLocale = locale;
+        currentOrigin = origin;
+        $('langBannerText').textContent =
+          `Language changed to ${getLocaleName(locale)} (${locale.toUpperCase()}) — refresh to start a new session.`;
+        show($('langChangeBanner'));
+      }
+    } else {
+      setupStartScreen(locale, origin);
+    }
   }
 });
 
@@ -626,6 +647,25 @@ $('btnSessionEnd').addEventListener('click', () => {
   if (confirm('End session? All review data will be cleared.')) endSession();
 });
 
+async function refreshSession() {
+  hide($('langChangeBanner'));
+  reviews = {};
+  translations = {};
+  englishTranslations = {};
+  await new Promise(resolve =>
+    chrome.storage.local.remove(['reviews', 'translations', 'englishTranslations'], resolve)
+  );
+  renderHistory();
+  updateStats();
+  hide(localePill);
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'RESET_SESSION' }).catch(() => {});
+  });
+  mainScreen.style.display = 'none';
+  startScreen.style.display = '';
+  setupStartScreen(currentLocale, currentOrigin);
+}
+
 async function endSession() {
   reviews = {};
   translations = {};
@@ -652,6 +692,23 @@ async function endSession() {
     ? setupStartScreen(data.detectedLocale, data.pageOrigin)
     : showState(stDetecting);
 }
+
+// ── Lang change banner ────────────────────────────────────────────────────────
+
+$('btnRefreshSession').addEventListener('click', refreshSession);
+$('btnBannerDismiss').addEventListener('click', () => hide($('langChangeBanner')));
+
+// ── Re-detect buttons (start screen) ─────────────────────────────────────────
+
+function sendRedetect() {
+  showState(stDetecting);
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'REDETECT' }).catch(() => {});
+  });
+}
+
+$('btnRedetect').addEventListener('click', sendRedetect);
+$('btnRedetectReady').addEventListener('click', sendRedetect);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

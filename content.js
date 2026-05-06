@@ -120,6 +120,10 @@ chrome.runtime.onMessage.addListener(msg => {
     if (elements.length > 0) navigateTo(0);
   }
 
+  if (msg.type === 'REDETECT') {
+    init();
+  }
+
   if (msg.type === 'RESET_SESSION') {
     sessionActive = false;
     elements = [];
@@ -168,3 +172,37 @@ new MutationObserver(mutations => {
 }).observe(document.documentElement, { childList: true, subtree: true });
 
 init();
+
+// Watch for <html lang="..."> changes (SPA locale switching via attribute)
+new MutationObserver(mutations => {
+  for (const m of mutations) {
+    if (m.attributeName === 'lang') {
+      const locale = detectLocale();
+      const origin = window.location.protocol === 'file:' ? 'file://' : window.location.origin;
+      chrome.storage.local.set({ detectedLocale: locale, pageOrigin: origin });
+      chrome.runtime.sendMessage({ type: 'LOCALE_DETECTED', locale, origin }).catch(() => {});
+    }
+  }
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+
+// Watch for URL changes (SPA navigation via pushState / replaceState / popstate)
+let _lastHref = location.href;
+
+function checkUrlChange() {
+  const href = location.href;
+  if (href === _lastHref) return;
+  _lastHref = href;
+  const locale = detectLocale();
+  const origin = window.location.protocol === 'file:' ? 'file://' : window.location.origin;
+  chrome.storage.local.set({ detectedLocale: locale, pageOrigin: origin });
+  chrome.runtime.sendMessage({ type: 'LOCALE_DETECTED', locale, origin }).catch(() => {});
+}
+
+window.addEventListener('popstate',   checkUrlChange);
+window.addEventListener('hashchange', checkUrlChange);
+
+(function patchHistory() {
+  const wrap = fn => function (...args) { fn.apply(history, args); checkUrlChange(); };
+  history.pushState    = wrap(history.pushState);
+  history.replaceState = wrap(history.replaceState);
+})();
