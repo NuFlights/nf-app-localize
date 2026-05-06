@@ -65,15 +65,16 @@ function onClick(e) {
   const currentText = el.textContent.trim();
   const referenceTranslation = translationsCache[key] || '';
 
-  chrome.storage.session.set({
-    currentElement: {
+  chrome.runtime.sendMessage({
+    type: 'ELEMENT_SELECTED',
+    data: {
       key,
       currentText,
       referenceTranslation,
       url: window.location.href,
       timestamp: Date.now(),
     },
-  });
+  }).catch(() => {});
 }
 
 // ── Highlight toggle ─────────────────────────────────────────────────────────

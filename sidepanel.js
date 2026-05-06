@@ -119,18 +119,18 @@ async function load() {
 
 // ── Session storage listener → element selected on page ───────────────────────
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'session' && changes.currentElement) {
-    currentEl = changes.currentElement.newValue;
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'ELEMENT_SELECTED') {
+    currentEl = message.data;
     showReviewForm(currentEl);
-
-    // Switch to Review tab if on History
     const reviewPane = $('reviewPane');
     if (!reviewPane.classList.contains('active')) {
       activateTab('reviewPane');
     }
   }
+});
 
+chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.reviews) {
     reviews = changes.reviews.newValue || {};
     renderHistory();
