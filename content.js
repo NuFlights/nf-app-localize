@@ -120,6 +120,17 @@ chrome.runtime.onMessage.addListener(msg => {
     if (elements.length > 0) navigateTo(0);
   }
 
+  if (msg.type === 'RESET_SESSION') {
+    sessionActive = false;
+    elements = [];
+    currentIndex = -1;
+    selectedElement = null;
+    document.querySelectorAll('[data-trt-attached="1"]').forEach(el => {
+      el.classList.remove('trt-i18n-element', 'trt-i18n-hover', 'trt-i18n-selected');
+      delete el.dataset.trtAttached;
+    });
+  }
+
   if (msg.type === 'NAVIGATE') {
     const skipSet = new Set(msg.skipKeys || []);
     const step = msg.direction === 'next' ? 1 : -1;

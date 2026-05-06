@@ -135,7 +135,7 @@
 
         <div class="action-row">
           <button id="btnSuggest" class="btn btn-suggest">✏️ Suggest Change</button>
-          <button id="btnIssue"   class="btn btn-issue">❌ Mark as Issue</button>
+          <button id="btnIssue"   class="btn btn-issue">🚩 Flag</button>
         </div>
 
         <div id="rvSuggestRow" class="field hidden">
@@ -144,7 +144,7 @@
         </div>
 
         <div id="rvNoteRow" class="field hidden">
-          <label class="field-label">Note (optional)</label>
+          <label class="field-label" id="rvNoteLabel">Reason for flagging (optional)</label>
           <textarea id="rvNoteText" class="field-textarea" rows="2" placeholder="Describe the issue…"></textarea>
         </div>
 
@@ -161,16 +161,14 @@
         <input type="text" id="searchBox" class="search-box" placeholder="Search by key…">
         <div class="chips">
           <button class="chip active" data-filter="all">All</button>
-          <button class="chip" data-filter="approved">Approved</button>
           <button class="chip" data-filter="suggested">Suggested</button>
-          <button class="chip" data-filter="needs_review">Issue</button>
+          <button class="chip" data-filter="needs_review">Flagged</button>
         </div>
       </div>
 
       <div class="stats-bar">
-        <div class="stat-box stat-approved"><span id="stApproved" class="stat-num">0</span>Approved</div>
         <div class="stat-box stat-suggested"><span id="stSuggested" class="stat-num">0</span>Suggested</div>
-        <div class="stat-box stat-issue"><span id="stIssue" class="stat-num">0</span>Issues</div>
+        <div class="stat-box stat-issue"><span id="stIssue" class="stat-num">0</span>Flagged</div>
         <div class="stat-box stat-total"><span id="stTotal" class="stat-num">0</span>Total</div>
       </div>
 
@@ -178,15 +176,32 @@
       <div id="listEmpty" class="list-empty hidden">No entries match the current filter.</div>
 
       <div class="export-bar">
-        <button id="exportJson" class="btn btn-outline btn-sm">⬇ JSON</button>
-        <button id="exportCsv"  class="btn btn-outline btn-sm">⬇ CSV</button>
-        <button id="importBtnHistory" class="btn btn-outline btn-sm">⬆ Import</button>
-        <input type="file" id="importFileHistory" accept=".json" class="hidden">
-        <button id="clearAll" class="btn btn-danger btn-sm" style="margin-left:auto">🗑 Clear all</button>
+        <button id="exportJson" class="btn btn-outline btn-sm">⬇ Download JSON</button>
+        <button id="btnSessionEnd" class="btn btn-danger btn-sm" style="margin-left:auto">⏹ Session End</button>
       </div>
 
     </div>
 
+  </div>
+
+  <!-- ── Download Modal ──────────────────────────────────────────── -->
+  <div id="dlModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <button id="dlClose" class="modal-close">✕</button>
+      <div class="modal-title">⬇ Download Options</div>
+      <div class="modal-summary" id="dlSummary"></div>
+      <div class="modal-option">
+        <button id="dlChangesBtn" class="btn btn-primary sp-btn-full">Download Changes Only</button>
+        <div class="modal-hint">Suggested corrections as a key → value JSON</div>
+      </div>
+      <div class="modal-option">
+        <button id="dlMergedBtn" class="btn btn-outline sp-btn-full">Download Merged File</button>
+        <div class="modal-hint">Original translations with all corrections applied</div>
+      </div>
+      <div id="dlEndRow" class="modal-end-row hidden">
+        <button id="dlEndBtn" class="btn btn-danger sp-btn-full">End Session without downloading</button>
+      </div>
+    </div>
   </div>
 
 </div>

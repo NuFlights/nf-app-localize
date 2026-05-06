@@ -60,10 +60,14 @@ const rvToast        = $('rvToast');
 const searchBox   = $('searchBox');
 const reviewList  = $('reviewList');
 const listEmpty   = $('listEmpty');
-const stApproved  = $('stApproved');
 const stSuggested = $('stSuggested');
 const stIssue     = $('stIssue');
 const stTotal     = $('stTotal');
+
+// Download modal
+const dlModal      = $('dlModal');
+const dlSummary    = $('dlSummary');
+const dlEndRow     = $('dlEndRow');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +100,20 @@ function flattenObject(obj, prefix = '') {
   return out;
 }
 
+function unflattenObject(flat) {
+  const out = {};
+  for (const [dotKey, value] of Object.entries(flat)) {
+    const parts = dotKey.split('.');
+    let obj = out;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (typeof obj[parts[i]] !== 'object' || obj[parts[i]] === null) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    obj[parts[parts.length - 1]] = value;
+  }
+  return out;
+}
+
 const LOCALE_NAMES = {
   fr: 'French', en: 'English', de: 'German', es: 'Spanish',
   it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ja: 'Japanese',
@@ -106,7 +124,7 @@ function getLocaleName(code) {
   return code ? (LOCALE_NAMES[code] || code.toUpperCase()) : 'Unknown';
 }
 
-const STATUS_LABELS = { pending: 'Pending', suggested: 'Suggested', needs_review: 'Issue' };
+const STATUS_LABELS = { pending: 'Pending', suggested: 'Suggested', needs_review: 'Flagged' };
 const STATUS_BADGE  = { pending: 'badge-pending', suggested: 'badge-suggested', needs_review: 'badge-needs_review' };
 
 function fmtStatus(s) { return STATUS_LABELS[s] ?? s; }
@@ -308,11 +326,6 @@ setupImport('importBtnLocal',    'importFileLocal',    onManualImport);
 setupImport('importBtnNoLocale', 'importFileNoLocale', onManualImport);
 setupImport('importBtnError',    'importFileError',    onManualImport);
 
-setupImport('importBtnHistory', 'importFileHistory', flat => {
-  translations = flat;
-  storageSet({ translations: flat });
-  showToast(`Imported ${Object.keys(flat).length} keys`);
-});
 
 // ── Navigation buttons ────────────────────────────────────────────────────────
 
@@ -479,6 +492,7 @@ function renderHistory() {
   if (historyFilter !== 'all') items = items.filter(r => r.status === historyFilter);
   if (query) items = items.filter(r => r.key.toLowerCase().includes(query));
   items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  items = items.slice(0, 10);
 
   reviewList.innerHTML = '';
   if (!items.length) { show(listEmpty); return; }
@@ -508,7 +522,6 @@ function renderHistory() {
 
 function updateStats() {
   const vals = Object.values(reviews);
-  stApproved.textContent  = vals.filter(r => r.status === 'approved').length;
   stSuggested.textContent = vals.filter(r => r.status === 'suggested').length;
   stIssue.textContent     = vals.filter(r => r.status === 'needs_review').length;
   stTotal.textContent     = vals.length;
@@ -525,25 +538,72 @@ document.querySelectorAll('.chip').forEach(chip =>
 
 searchBox?.addEventListener('input', renderHistory);
 
-// ── Export ────────────────────────────────────────────────────────────────────
+// ── Download modal ────────────────────────────────────────────────────────────
+
+let sessionEndPending = false;
+
+function openDownloadModal(fromSessionEnd = false) {
+  const suggested = Object.values(reviews).filter(r => r.status === 'suggested');
+  const flagged   = Object.values(reviews).filter(r => r.status === 'needs_review');
+
+  dlSummary.innerHTML = `
+    <div class="modal-stat"><span class="modal-stat-n">${suggested.length}</span> Suggested</div>
+    <div class="modal-stat modal-stat-flag"><span class="modal-stat-n">${flagged.length}</span> Flagged</div>
+  `;
+
+  sessionEndPending = fromSessionEnd;
+  fromSessionEnd ? show(dlEndRow) : hide(dlEndRow);
+  show(dlModal);
+}
 
 $('exportJson').addEventListener('click', () => {
-  const data = Object.values(reviews);
-  if (!data.length) { showToast('Nothing to export', false); return; }
-  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `translations-review-${Date.now()}.json`);
+  if (!Object.keys(reviews).length) { showToast('Nothing to export', false); return; }
+  openDownloadModal(false);
 });
 
-$('exportCsv').addEventListener('click', () => {
-  const data = Object.values(reviews);
-  if (!data.length) { showToast('Nothing to export', false); return; }
-  const header = ['key', 'currentText', 'suggestedText', 'note', 'status', 'url', 'timestamp'];
-  const rows   = data.map(r => header.map(h => csvEsc(r[h] ?? '')).join(','));
-  downloadBlob(new Blob([[header.join(','), ...rows].join('\n')], { type: 'text/csv' }), `translations-review-${Date.now()}.csv`);
+$('dlClose').addEventListener('click', () => {
+  hide(dlModal);
+  sessionEndPending = false;
 });
 
-function csvEsc(val) {
-  const s = String(val);
-  return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+$('dlChangesBtn').addEventListener('click', () => {
+  downloadChangesOnly();
+  hide(dlModal);
+  if (sessionEndPending) endSession();
+});
+
+$('dlMergedBtn').addEventListener('click', () => {
+  downloadMerged();
+  hide(dlModal);
+  if (sessionEndPending) endSession();
+});
+
+$('dlEndBtn').addEventListener('click', () => {
+  hide(dlModal);
+  endSession();
+});
+
+function downloadChangesOnly() {
+  const changes = {};
+  Object.values(reviews).forEach(r => {
+    if (r.status === 'suggested' && r.suggestedText) changes[r.key] = r.suggestedText;
+  });
+  if (!Object.keys(changes).length) { showToast('No suggested corrections to export', false); return; }
+  downloadBlob(
+    new Blob([JSON.stringify(changes, null, 2)], { type: 'application/json' }),
+    `changes-${currentLocale || 'review'}-${Date.now()}.json`
+  );
+}
+
+function downloadMerged() {
+  const merged = { ...translations };
+  Object.values(reviews).forEach(r => {
+    if (r.status === 'suggested' && r.suggestedText) merged[r.key] = r.suggestedText;
+  });
+  downloadBlob(
+    new Blob([JSON.stringify(unflattenObject(merged), null, 2)], { type: 'application/json' }),
+    `merged-${currentLocale || 'review'}-${Date.now()}.json`
+  );
 }
 
 function downloadBlob(blob, name) {
@@ -553,12 +613,45 @@ function downloadBlob(blob, name) {
   URL.revokeObjectURL(url);
 }
 
-$('clearAll').addEventListener('click', async () => {
-  if (!confirm('Delete all review data? This cannot be undone.')) return;
-  reviews = {};
-  await storageSet({ reviews: {} });
-  renderHistory(); updateStats();
+// ── Session End ───────────────────────────────────────────────────────────────
+
+$('btnSessionEnd').addEventListener('click', () => {
+  const hasData = Object.keys(reviews).length > 0;
+
+  if (hasData) {
+    const download = confirm('Download your work before ending the session?');
+    if (download) { openDownloadModal(true); return; }
+  }
+
+  if (confirm('End session? All review data will be cleared.')) endSession();
 });
+
+async function endSession() {
+  reviews = {};
+  translations = {};
+  englishTranslations = {};
+
+  await new Promise(resolve => chrome.storage.local.remove(
+    ['reviews', 'translations', 'englishTranslations'], resolve
+  ));
+
+  renderHistory();
+  updateStats();
+  hide(localePill);
+
+  // Tell content script to remove all highlights
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'RESET_SESSION' }).catch(() => {});
+  });
+
+  // Return to start screen
+  mainScreen.style.display = 'none';
+  startScreen.style.display = '';
+  const data = await storageGet(['detectedLocale', 'pageOrigin']);
+  data.detectedLocale !== undefined
+    ? setupStartScreen(data.detectedLocale, data.pageOrigin)
+    : showState(stDetecting);
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
