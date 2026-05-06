@@ -1,0 +1,52 @@
+{
+  "nav": {
+    "home": "Home",
+    "flights": "Flights",
+    "bookings": "Bookings",
+    "profile": "Profile",
+    "help": "Help"
+  },
+  "home": {
+    "title": "Welcome to Nuflights",
+    "subtitle": "Find and book your next flight easily."
+  },
+  "search": {
+    "heading": "Search Flights",
+    "from": "From",
+    "to": "To",
+    "date": "Departure date",
+    "passengers": "Passengers",
+    "adult": "1 Adult",
+    "cta": "Search Flights",
+    "reset": "Reset"
+  },
+  "results": {
+    "heading": "Available Flights",
+    "col": {
+      "flight": "Flight",
+      "departure": "Departure",
+      "arrival": "Arrival",
+      "duration": "Duration",
+      "price": "Price",
+      "status": "Status"
+    }
+  },
+  "booking": {
+    "heading": "Booking Details",
+    "first_name": "First Name",
+    "last_name": "Last Name",
+    "email": "Email Address",
+    "confirm": "Confirm Booking",
+    "cancel": "Cancel"
+  },
+  "status": {
+    "available": "Available",
+    "few_seats": "Few seats left"
+  },
+  "msg": {
+    "success": "Your booking has been confirmed successfully.",
+    "error": "An error occurred. Please try again.",
+    "session_expired": "Your session has expired. Please log in again.",
+    "no_flights": "No flights available for these criteria."
+  }
+}

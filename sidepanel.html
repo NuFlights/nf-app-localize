@@ -9,7 +9,7 @@
 <body>
 <div class="panel">
 
-  <!-- ── Header ─────────────────────────────────────────────── -->
+  <!-- ── Header ──────────────────────────────────────────────────── -->
   <div class="header">
     <div class="header-left">
       <svg class="header-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -17,127 +17,166 @@
       </svg>
       <div>
         <div class="header-title">Translation Review</div>
-        <div class="header-sub">French — Nuflights QA</div>
+        <div class="header-sub">Nuflights QA</div>
       </div>
     </div>
-    <label class="toggle-wrap" title="Toggle highlight mode">
-      <input type="checkbox" id="highlightToggle" checked>
-      <div class="toggle-track"></div>
-      <span>Highlight</span>
-    </label>
+    <span id="localePill" class="locale-pill hidden"></span>
   </div>
 
-  <!-- ── Tabs ───────────────────────────────────────────────── -->
-  <div class="tabs">
-    <button class="tab-btn active" data-pane="reviewPane">Review</button>
-    <button class="tab-btn" data-pane="historyPane">History</button>
+  <!-- ── Start Screen ─────────────────────────────────────────────── -->
+  <div id="startScreen">
+
+    <div id="stDetecting" class="state-panel">
+      <div class="sp-icon sp-spin">↻</div>
+      <div class="sp-title">Detecting locale…</div>
+      <div class="sp-desc">
+        If this doesn't update, the extension may not be active on this page.<br><br>
+        Try: <strong>reload the extension</strong> at <code>chrome://extensions</code>, then <strong>refresh the page</strong>.
+      </div>
+    </div>
+
+    <div id="stReady" class="state-panel hidden">
+      <div class="sp-icon">🌍</div>
+      <div class="sp-title">Locale Detected</div>
+      <div class="sp-locale" id="localeName"></div>
+      <div class="sp-url-box">
+        <div class="sp-url-label">Translation file</div>
+        <div class="sp-url" id="fetchUrl"></div>
+      </div>
+      <button id="btnStart" class="btn btn-primary sp-btn-full">Start Session</button>
+      <div class="sp-or">or</div>
+      <button id="importBtnStart" class="btn btn-outline sp-btn-full">Import JSON manually</button>
+      <input type="file" id="importFileStart" accept=".json" class="hidden">
+    </div>
+
+    <div id="stFileLocal" class="state-panel hidden">
+      <div class="sp-icon">📁</div>
+      <div class="sp-title">Local file detected</div>
+      <div class="sp-desc">Auto-fetch is not available for <code>file://</code> pages.<br>Import the reference translations JSON to start reviewing.</div>
+      <button id="importBtnLocal" class="btn btn-primary sp-btn-full">Import JSON</button>
+      <input type="file" id="importFileLocal" accept=".json" class="hidden">
+    </div>
+
+    <div id="stNoLocale" class="state-panel hidden">
+      <div class="sp-icon">⚠️</div>
+      <div class="sp-title">No locale detected</div>
+      <div class="sp-desc">No <code>lang</code> attribute found on this page. You can still import a translations file and start reviewing.</div>
+      <button id="importBtnNoLocale" class="btn btn-outline sp-btn-full">Import JSON manually</button>
+      <input type="file" id="importFileNoLocale" accept=".json" class="hidden">
+    </div>
+
+    <div id="stFetching" class="state-panel hidden">
+      <div class="sp-icon sp-spin">↻</div>
+      <div class="sp-title">Fetching translations…</div>
+      <div class="sp-desc" id="fetchingUrl"></div>
+    </div>
+
+    <div id="stError" class="state-panel hidden">
+      <div class="sp-icon">❌</div>
+      <div class="sp-title">Translation file not found</div>
+      <div class="sp-desc" id="errorMsg"></div>
+      <button id="btnRetry" class="btn btn-outline sp-btn-full">Try again</button>
+      <div class="sp-or">or</div>
+      <button id="importBtnError" class="btn btn-outline sp-btn-full">Import JSON manually</button>
+      <input type="file" id="importFileError" accept=".json" class="hidden">
+    </div>
+
   </div>
 
-  <!-- ── Review Pane ─────────────────────────────────────────── -->
-  <div id="reviewPane" class="pane active">
+  <!-- ── Main Screen (session active) ────────────────────────────── -->
+  <div id="mainScreen" style="display:none">
 
-    <!-- Empty state -->
-    <div id="reviewEmpty" class="empty">
-      <div class="empty-icon">🔍</div>
-      <div class="empty-title">No element selected</div>
-      <div class="empty-desc">
-        Click on any highlighted text on the page to open it here for review.
-        <br><br>
-        Import your translations file so reference text appears alongside each element.
-      </div>
-      <button id="importBtnReview" class="btn btn-outline">⬆ Import Translations JSON</button>
-      <input type="file" id="importFileReview" accept=".json" class="hidden">
+    <div class="tabs">
+      <button class="tab-btn active" data-pane="reviewPane">Translation</button>
+      <button class="tab-btn" data-pane="historyPane">Review/Downloads</button>
     </div>
 
-    <!-- Review form -->
-    <div id="reviewForm" class="hidden">
+    <!-- Review Pane -->
+    <div id="reviewPane" class="pane active">
 
-      <div class="key-badge">
-        <span class="key-label">KEY</span>
-        <span id="rvKey" class="key-value"></span>
+      <div id="reviewEmpty" class="empty">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">No element selected</div>
+        <div class="empty-desc">Click on any highlighted text on the page to open it here for review.</div>
       </div>
 
-      <div class="field">
-        <label class="field-label">Current text on page</label>
-        <div id="rvCurrentText" class="field-box"></div>
-      </div>
+      <div id="reviewForm" class="hidden">
 
-      <div class="field" id="rvRefRow">
-        <label class="field-label">Reference (imported)</label>
-        <div id="rvRefText" class="field-box ref"></div>
-      </div>
+        <div class="key-badge">
+          <span class="key-label">KEY</span>
+          <span id="rvKey" class="key-value"></span>
+        </div>
 
-      <div class="field">
-        <label class="field-label">Status</label>
-        <span id="rvStatus" class="badge badge-pending">Pending</span>
-      </div>
+        <div class="field">
+          <label class="field-label">Current text on page</label>
+          <div id="rvCurrentText" class="field-box"></div>
+        </div>
 
-      <!-- Action buttons -->
-      <div class="action-row">
-        <button id="btnApprove"   class="btn btn-approve">✅ Approve</button>
-        <button id="btnSuggest"   class="btn btn-suggest">✏️ Suggest</button>
-        <button id="btnIssue"     class="btn btn-issue">❌ Issue</button>
-      </div>
+        <div class="field" id="rvRefRow">
+          <label class="field-label">Reference (imported)</label>
+          <div id="rvRefText" class="field-box ref"></div>
+        </div>
 
-      <!-- Suggestion input (shown when Suggest / Issue clicked) -->
-      <div id="rvSuggestRow" class="field hidden">
-        <label class="field-label" id="rvSuggestLabel">Suggested correction</label>
-        <textarea id="rvSuggestText" class="field-textarea"
-                  placeholder="Enter the correct French translation…"></textarea>
-      </div>
+        <div class="field">
+          <label class="field-label">Status</label>
+          <span id="rvStatus" class="badge badge-pending">Pending</span>
+        </div>
 
-      <div id="rvNoteRow" class="field hidden">
-        <label class="field-label">Note (optional)</label>
-        <textarea id="rvNoteText" class="field-textarea" rows="2"
-                  placeholder="Describe the issue…"></textarea>
-      </div>
+        <div class="action-row">
+          <button id="btnApprove" class="btn btn-approve">✅ Approve</button>
+          <button id="btnSuggest" class="btn btn-suggest">✏️ Suggest</button>
+          <button id="btnIssue"   class="btn btn-issue">❌ Issue</button>
+        </div>
 
-      <button id="btnSubmit" class="btn btn-primary hidden" style="margin-top:10px">
-        Save Review
-      </button>
+        <div id="rvSuggestRow" class="field hidden">
+          <label class="field-label" id="rvSuggestLabel">Suggested correction</label>
+          <textarea id="rvSuggestText" class="field-textarea" placeholder="Enter the correct French translation…"></textarea>
+        </div>
 
-      <div id="rvToast" class="hidden"></div>
-    </div>
-  </div>
+        <div id="rvNoteRow" class="field hidden">
+          <label class="field-label">Note (optional)</label>
+          <textarea id="rvNoteText" class="field-textarea" rows="2" placeholder="Describe the issue…"></textarea>
+        </div>
 
-  <!-- ── History Pane ─────────────────────────────────────────── -->
-  <div id="historyPane" class="pane">
+        <button id="btnSubmit" class="btn btn-primary hidden" style="margin-top:10px">Save Review</button>
+        <div id="rvToast" class="hidden"></div>
 
-    <div class="history-controls">
-      <input type="text" id="searchBox" class="search-box" placeholder="Search by key…">
-      <div class="chips">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="approved">Approved</button>
-        <button class="chip" data-filter="suggested">Suggested</button>
-        <button class="chip" data-filter="needs_review">Issue</button>
       </div>
     </div>
 
-    <div class="stats-bar">
-      <div class="stat-box stat-approved">
-        <span id="stApproved" class="stat-num">0</span>Approved
+    <!-- History Pane -->
+    <div id="historyPane" class="pane">
+
+      <div class="history-controls">
+        <input type="text" id="searchBox" class="search-box" placeholder="Search by key…">
+        <div class="chips">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="approved">Approved</button>
+          <button class="chip" data-filter="suggested">Suggested</button>
+          <button class="chip" data-filter="needs_review">Issue</button>
+        </div>
       </div>
-      <div class="stat-box stat-suggested">
-        <span id="stSuggested" class="stat-num">0</span>Suggested
+
+      <div class="stats-bar">
+        <div class="stat-box stat-approved"><span id="stApproved" class="stat-num">0</span>Approved</div>
+        <div class="stat-box stat-suggested"><span id="stSuggested" class="stat-num">0</span>Suggested</div>
+        <div class="stat-box stat-issue"><span id="stIssue" class="stat-num">0</span>Issues</div>
+        <div class="stat-box stat-total"><span id="stTotal" class="stat-num">0</span>Total</div>
       </div>
-      <div class="stat-box stat-issue">
-        <span id="stIssue" class="stat-num">0</span>Issues
+
+      <div id="reviewList" class="review-list"></div>
+      <div id="listEmpty" class="list-empty hidden">No entries match the current filter.</div>
+
+      <div class="export-bar">
+        <button id="exportJson" class="btn btn-outline btn-sm">⬇ JSON</button>
+        <button id="exportCsv"  class="btn btn-outline btn-sm">⬇ CSV</button>
+        <button id="importBtnHistory" class="btn btn-outline btn-sm">⬆ Import</button>
+        <input type="file" id="importFileHistory" accept=".json" class="hidden">
+        <button id="clearAll" class="btn btn-danger btn-sm" style="margin-left:auto">🗑 Clear all</button>
       </div>
-      <div class="stat-box stat-total">
-        <span id="stTotal" class="stat-num">0</span>Total
-      </div>
+
     </div>
 
-    <div id="reviewList" class="review-list"></div>
-    <div id="listEmpty" class="list-empty hidden">No entries match the current filter.</div>
-
-    <div class="export-bar">
-      <button id="exportJson" class="btn btn-outline btn-sm">⬇ JSON</button>
-      <button id="exportCsv"  class="btn btn-outline btn-sm">⬇ CSV</button>
-      <button id="importBtnHistory" class="btn btn-outline btn-sm">⬆ Import</button>
-      <input type="file" id="importFileHistory" accept=".json" class="hidden">
-      <button id="clearAll" class="btn btn-danger btn-sm" style="margin-left:auto">🗑 Clear all</button>
-    </div>
   </div>
 
 </div>

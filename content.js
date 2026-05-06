@@ -1,124 +1,99 @@
 'use strict';
 
-let highlightEnabled = true;
+let sessionActive = false;
 let selectedElement = null;
 let translationsCache = {};
 
-// ── Initialisation ──────────────────────────────────────────────────────────
+function storageGet(keys) {
+  return new Promise(resolve => chrome.storage.local.get(keys, resolve));
+}
+
+function detectLocale() {
+  // 1. HTML lang attribute — most reliable
+  const lang = document.documentElement.lang;
+  if (lang) return lang.split('-')[0].toLowerCase();
+
+  // 2. URL path segment e.g. /fr/, /en-US/
+  const pathMatch = window.location.pathname.match(/^\/([a-z]{2})(?:[-_][a-z]{2})?\//i);
+  if (pathMatch) return pathMatch[1].toLowerCase();
+
+  // 3. Query param ?lang=fr / ?locale=fr / ?lng=fr
+  const p = new URLSearchParams(window.location.search);
+  const qp = p.get('lang') || p.get('locale') || p.get('lng');
+  if (qp) return qp.split('-')[0].toLowerCase();
+
+  return null;
+}
 
 async function init() {
-  const data = await storageGet(['highlightEnabled', 'translations']);
-  highlightEnabled = data.highlightEnabled !== false;
-  translationsCache = data.translations || {};
-  scanAndAttach(document.documentElement);
-}
+  const { translations } = await storageGet(['translations']);
+  translationsCache = translations || {};
 
-function storageGet(keys) {
-  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
-}
+  const locale = detectLocale();
+  // Use sentinel 'file://' so side panel can distinguish from a real origin being null
+  const origin = window.location.protocol === 'file:' ? 'file://' : window.location.origin;
 
-// ── Element detection ────────────────────────────────────────────────────────
+  chrome.storage.local.set({ detectedLocale: locale, pageOrigin: origin });
+  chrome.runtime.sendMessage({ type: 'LOCALE_DETECTED', locale, origin }).catch(() => {});
+}
 
 function scanAndAttach(root) {
-  root.querySelectorAll('[data-i18n]').forEach(attachElement);
-  if (root.dataset && root.dataset.i18n) attachElement(root);
+  root.querySelectorAll('[data-i18n]').forEach(attachEl);
+  if (root.dataset?.i18n) attachEl(root);
 }
 
-function attachElement(el) {
+function attachEl(el) {
   if (el.dataset.trtAttached === '1') return;
   el.dataset.trtAttached = '1';
-
-  if (highlightEnabled) el.classList.add('trt-i18n-element');
-
-  el.addEventListener('mouseenter', onEnter);
-  el.addEventListener('mouseleave', onLeave);
-  // capture phase so we intercept before app handlers when in review mode
+  el.classList.add('trt-i18n-element');
+  el.addEventListener('mouseenter', e => e.currentTarget.classList.add('trt-i18n-hover'));
+  el.addEventListener('mouseleave', e => e.currentTarget.classList.remove('trt-i18n-hover'));
   el.addEventListener('click', onClick, true);
 }
 
-// ── Hover & selection ────────────────────────────────────────────────────────
-
-function onEnter(e) {
-  if (highlightEnabled) e.currentTarget.classList.add('trt-i18n-hover');
-}
-
-function onLeave(e) {
-  e.currentTarget.classList.remove('trt-i18n-hover');
-}
-
 function onClick(e) {
-  if (!highlightEnabled) return;
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
 
   const el = e.currentTarget;
-
-  if (selectedElement && selectedElement !== el) {
-    selectedElement.classList.remove('trt-i18n-selected');
-  }
+  selectedElement?.classList.remove('trt-i18n-selected');
   selectedElement = el;
   el.classList.add('trt-i18n-selected');
   el.classList.remove('trt-i18n-hover');
 
-  const key = el.dataset.i18n;
-  const currentText = el.textContent.trim();
-  const referenceTranslation = translationsCache[key] || '';
-
   chrome.runtime.sendMessage({
     type: 'ELEMENT_SELECTED',
     data: {
-      key,
-      currentText,
-      referenceTranslation,
+      key: el.dataset.i18n,
+      currentText: el.textContent.trim(),
+      referenceTranslation: translationsCache[el.dataset.i18n] || '',
       url: window.location.href,
       timestamp: Date.now(),
     },
   }).catch(() => {});
 }
 
-// ── Highlight toggle ─────────────────────────────────────────────────────────
-
-function setHighlight(enabled) {
-  highlightEnabled = enabled;
-  document.querySelectorAll('[data-i18n]').forEach((el) => {
-    if (enabled) {
-      el.classList.add('trt-i18n-element');
-    } else {
-      el.classList.remove('trt-i18n-element', 'trt-i18n-hover', 'trt-i18n-selected');
-    }
-  });
-}
-
-// ── Storage listeners ─────────────────────────────────────────────────────────
+chrome.runtime.onMessage.addListener(msg => {
+  if (msg.type !== 'START_SESSION') return;
+  if (msg.translations) translationsCache = msg.translations;
+  sessionActive = true;
+  scanAndAttach(document.documentElement);
+});
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
-  if (changes.highlightEnabled !== undefined) {
-    setHighlight(changes.highlightEnabled.newValue);
-  }
-  if (changes.translations) {
+  if (area === 'local' && changes.translations) {
     translationsCache = changes.translations.newValue || {};
   }
 });
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'SET_HIGHLIGHT') setHighlight(msg.enabled);
-});
-
-// ── MutationObserver (SPA support) ───────────────────────────────────────────
-
-const observer = new MutationObserver((mutations) => {
-  for (const m of mutations) {
-    for (const node of m.addedNodes) {
-      if (node.nodeType !== Node.ELEMENT_NODE) continue;
-      scanAndAttach(node);
+new MutationObserver(mutations => {
+  if (!sessionActive) return;
+  for (const { addedNodes } of mutations) {
+    for (const node of addedNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) scanAndAttach(node);
     }
   }
-});
-
-observer.observe(document.documentElement, { childList: true, subtree: true });
-
-// ── Start ─────────────────────────────────────────────────────────────────────
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 init();
