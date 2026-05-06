@@ -1,6 +1,7 @@
 'use strict';
 
 let sessionActive  = false;
+let interceptEnabled = true;
 let selectedElement = null;
 let elements       = [];   // ordered list of all attached i18n elements in the DOM
 let currentIndex   = -1;
@@ -60,6 +61,7 @@ function rebuildElements() {
 // ── Click handler ─────────────────────────────────────────────────────────────
 
 function onClick(e) {
+  if (!interceptEnabled) return; // navigate mode — let the app handle clicks
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
@@ -124,8 +126,15 @@ chrome.runtime.onMessage.addListener(msg => {
     init();
   }
 
+  if (msg.type === 'SET_INTERCEPT') {
+    interceptEnabled = msg.enabled;
+    document.documentElement.classList.toggle('trt-navigate-mode', !interceptEnabled);
+  }
+
   if (msg.type === 'RESET_SESSION') {
     sessionActive = false;
+    interceptEnabled = true;
+    document.documentElement.classList.remove('trt-navigate-mode');
     elements = [];
     currentIndex = -1;
     selectedElement = null;

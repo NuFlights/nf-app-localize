@@ -192,6 +192,7 @@ async function activateSession(flat) {
     localePill.textContent = `${getLocaleName(currentLocale)} · ${currentLocale.toUpperCase()}`;
     show(localePill);
   }
+  show(btnToggleNav);
 
   startScreen.style.display = 'none';
   mainScreen.style.display  = 'flex';
@@ -648,6 +649,7 @@ $('btnSessionEnd').addEventListener('click', () => {
 });
 
 async function refreshSession() {
+  resetNavToggle();
   hide($('langChangeBanner'));
   reviews = {};
   translations = {};
@@ -667,6 +669,7 @@ async function refreshSession() {
 }
 
 async function endSession() {
+  resetNavToggle();
   reviews = {};
   translations = {};
   englishTranslations = {};
@@ -691,6 +694,27 @@ async function endSession() {
   data.detectedLocale !== undefined
     ? setupStartScreen(data.detectedLocale, data.pageOrigin)
     : showState(stDetecting);
+}
+
+// ── Navigate / Review toggle ──────────────────────────────────────────────────
+
+let interceptEnabled = true;
+const btnToggleNav = $('btnToggleNav');
+
+btnToggleNav.addEventListener('click', () => {
+  interceptEnabled = !interceptEnabled;
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { type: 'SET_INTERCEPT', enabled: interceptEnabled }).catch(() => {});
+  });
+  btnToggleNav.textContent   = interceptEnabled ? '🔒 Review' : '🔓 Navigate';
+  btnToggleNav.classList.toggle('nav-mode-active', !interceptEnabled);
+});
+
+function resetNavToggle() {
+  interceptEnabled = true;
+  btnToggleNav.textContent = '🔒 Review';
+  btnToggleNav.classList.remove('nav-mode-active');
+  hide(btnToggleNav);
 }
 
 // ── Lang change banner ────────────────────────────────────────────────────────

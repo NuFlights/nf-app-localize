@@ -16,3 +16,11 @@
   outline: 2px solid #2563eb !important;
   background-color: rgba(37, 99, 235, 0.1) !important;
 }
+
+/* Navigate mode — highlights dimmed, cursor restored, clicks pass through */
+.trt-navigate-mode [data-i18n].trt-i18n-element,
+.trt-navigate-mode [data-i18n].trt-i18n-hover,
+.trt-navigate-mode [data-i18n].trt-i18n-selected {
+  outline: 1px dashed rgba(37, 99, 235, 0.18) !important;
+  cursor: auto !important;
+}
