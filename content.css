@@ -1,26 +1,26 @@
 /* Translatable element indicators — injected by the Translation Review extension */
 
 [data-i18n].trt-i18n-element {
-  outline: 1px dashed rgba(37, 99, 235, 0.45) !important;
+  outline: 1px dashed rgba(163, 21, 23, 0.45) !important;
   outline-offset: 2px !important;
   cursor: crosshair !important;
   transition: outline 0.12s ease, background-color 0.12s ease !important;
 }
 
 [data-i18n].trt-i18n-hover {
-  outline: 2px solid rgba(37, 99, 235, 0.85) !important;
-  background-color: rgba(37, 99, 235, 0.06) !important;
+  outline: 2px solid rgba(163, 21, 23, 0.85) !important;
+  background-color: rgba(163, 21, 23, 0.06) !important;
 }
 
 [data-i18n].trt-i18n-selected {
-  outline: 2px solid #2563eb !important;
-  background-color: rgba(37, 99, 235, 0.1) !important;
+  outline: 2px solid #a31517 !important;
+  background-color: rgba(163, 21, 23, 0.1) !important;
 }
 
 /* Navigate mode — highlights dimmed, cursor restored, clicks pass through */
 .trt-navigate-mode [data-i18n].trt-i18n-element,
 .trt-navigate-mode [data-i18n].trt-i18n-hover,
 .trt-navigate-mode [data-i18n].trt-i18n-selected {
-  outline: 1px dashed rgba(37, 99, 235, 0.18) !important;
+  outline: 1px dashed rgba(163, 21, 23, 0.18) !important;
   cursor: auto !important;
 }

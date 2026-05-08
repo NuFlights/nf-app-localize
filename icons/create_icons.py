@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Generate PNG icon files for the Translation Review extension."""
+"""Generate PNG icon files for the Translation Review extension — Nuflights theme."""
 
 import struct
 import zlib
+import math
 import os
 
-
-BLUE  = (37, 99, 235)
-WHITE = (255, 255, 255)
+MAROON = (163, 21, 23)
+WHITE  = (255, 255, 255)
+BG     = (0, 0, 0, 0)  # unused — kept for reference
 
 
 def _chunk(name: bytes, data: bytes) -> bytes:
@@ -58,48 +59,54 @@ def _rounded_bg(pixels, size, radius):
                     pixels[y][x] = WHITE
 
 
+def _draw_globe(pixels, size, cx, cy, r, thick, color):
+    """Draw a globe: circle outline + equator + meridian + two latitude bands."""
+    # Outer circle
+    for angle_deg in range(0, 360):
+        a = math.radians(angle_deg)
+        for t in range(thick):
+            rad = r - t
+            x = int(round(cx + rad * math.cos(a)))
+            y = int(round(cy + rad * math.sin(a)))
+            _set(pixels, x, y, color, size)
+
+    # Equator (horizontal line through centre)
+    for x in range(cx - r + thick, cx + r - thick + 1):
+        for t in range(thick):
+            _set(pixels, x, cy - t // 2, color, size)
+
+    # Prime meridian (vertical ellipse — simplified as vertical line)
+    for y in range(cy - r + thick, cy + r - thick + 1):
+        for t in range(thick):
+            _set(pixels, cx - t // 2, y, color, size)
+
+    # Upper latitude line (1/3 above equator)
+    lat_y = cy - r // 3
+    lat_half = int(round(math.sqrt(max(0, r * r - (lat_y - cy) ** 2))))
+    for x in range(cx - lat_half + thick, cx + lat_half - thick + 1):
+        for t in range(thick):
+            _set(pixels, x, lat_y - t // 2, color, size)
+
+    # Lower latitude line (1/3 below equator)
+    lat_y2 = cy + r // 3
+    for x in range(cx - lat_half + thick, cx + lat_half - thick + 1):
+        for t in range(thick):
+            _set(pixels, x, lat_y2 - t // 2, color, size)
+
+
 def make_icon(size: int) -> bytes:
     s = size
-    pixels = _canvas(s, BLUE)
+    pixels = _canvas(s, MAROON)
     _rounded_bg(pixels, s, max(s // 5, 2))
 
     if s == 16:
-        # "T" — 2 px thick crossbar, 2 px wide stem
-        _rect(pixels,  3,  3, 10, 2, WHITE, s)   # crossbar
-        _rect(pixels,  7,  3,  2, 10, WHITE, s)  # stem
-
+        cx, cy, r, thick = 8, 8, 5, 1
     elif s == 48:
-        # "T" with a subtle translation-arrow hint below the stem
-        _rect(pixels,  7,  8, 34,  5, WHITE, s)  # crossbar
-        _rect(pixels, 21,  8,  6, 30, WHITE, s)  # stem
+        cx, cy, r, thick = 24, 24, 17, 2
+    else:  # 128
+        cx, cy, r, thick = 64, 64, 46, 3
 
-        # small right-arrow  ——>
-        ay = 41
-        _rect(pixels,  8, ay, 24, 3, WHITE, s)   # shaft
-        # arrowhead: 3 rows, each offset by 1
-        for i, (ax, aw) in enumerate([(32,3),(35,3),(38,3)]):
-            _rect(pixels, ax, ay - i, aw, 3 + i * 2, WHITE, s)
-
-    elif s == 128:
-        # "T"
-        _rect(pixels, 16, 16, 96, 14, WHITE, s)  # crossbar
-        _rect(pixels, 57, 16, 14, 58, WHITE, s)  # stem
-
-        # right-arrow  ——>  below the T
-        ay = 90
-        sh = 8   # shaft height
-        _rect(pixels, 16, ay, 68, sh, WHITE, s)  # shaft
-
-        # arrowhead: 5 columns tapering outward
-        for i in range(5):
-            col_x = 84 + i * 5
-            spread = i * sh // 4
-            _rect(pixels, col_x, ay - spread, 5, sh + spread * 2, WHITE, s)
-
-        # two short "language" lines at bottom — source / target
-        _rect(pixels, 16, 112, 36, 5, WHITE, s)  # source lang bar
-        _rect(pixels, 76, 112, 36, 5, WHITE, s)  # target lang bar
-
+    _draw_globe(pixels, s, cx, cy, r, thick, WHITE)
     return _encode_png(pixels, s)
 
 

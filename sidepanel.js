@@ -562,9 +562,10 @@ searchBox?.addEventListener('input', renderHistory);
 
 // ── Download modal ────────────────────────────────────────────────────────────
 
-let sessionEndPending = false;
+let sessionEndPending     = false;
+let sessionRefreshPending = false;
 
-function openDownloadModal(fromSessionEnd = false) {
+function openDownloadModal(fromSessionEnd = false, fromRefresh = false) {
   const suggested = Object.values(reviews).filter(r => r.status === 'suggested');
   const flagged   = Object.values(reviews).filter(r => r.status === 'needs_review');
 
@@ -573,9 +574,24 @@ function openDownloadModal(fromSessionEnd = false) {
     <div class="modal-stat modal-stat-flag"><span class="modal-stat-n">${flagged.length}</span> Flagged</div>
   `;
 
-  sessionEndPending = fromSessionEnd;
-  fromSessionEnd ? show(dlEndRow) : hide(dlEndRow);
+  sessionEndPending     = fromSessionEnd;
+  sessionRefreshPending = fromRefresh;
+
+  if (fromSessionEnd || fromRefresh) {
+    $('dlEndBtn').textContent = fromRefresh
+      ? 'Restart without downloading'
+      : 'End Session without downloading';
+    show(dlEndRow);
+  } else {
+    hide(dlEndRow);
+  }
+
   show(dlModal);
+}
+
+function _afterModal() {
+  if (sessionEndPending)     { sessionEndPending     = false; endSession(); }
+  else if (sessionRefreshPending) { sessionRefreshPending = false; doRefreshSession(); }
 }
 
 $('exportJson').addEventListener('click', () => {
@@ -585,24 +601,24 @@ $('exportJson').addEventListener('click', () => {
 
 $('dlClose').addEventListener('click', () => {
   hide(dlModal);
-  sessionEndPending = false;
+  sessionEndPending = sessionRefreshPending = false;
 });
 
 $('dlChangesBtn').addEventListener('click', () => {
   downloadChangesOnly();
   hide(dlModal);
-  if (sessionEndPending) endSession();
+  _afterModal();
 });
 
 $('dlMergedBtn').addEventListener('click', () => {
   downloadMerged();
   hide(dlModal);
-  if (sessionEndPending) endSession();
+  _afterModal();
 });
 
 $('dlEndBtn').addEventListener('click', () => {
   hide(dlModal);
-  endSession();
+  _afterModal();
 });
 
 function downloadChangesOnly() {
@@ -648,7 +664,16 @@ $('btnSessionEnd').addEventListener('click', () => {
   if (confirm('End session? All review data will be cleared.')) endSession();
 });
 
-async function refreshSession() {
+function refreshSession() {
+  // If there are reviews, show the download modal first so nothing is lost
+  if (Object.keys(reviews).length > 0) {
+    openDownloadModal(false, true);
+  } else {
+    doRefreshSession();
+  }
+}
+
+async function doRefreshSession() {
   resetNavToggle();
   hide($('langChangeBanner'));
   reviews = {};
