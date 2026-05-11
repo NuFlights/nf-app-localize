@@ -11,16 +11,22 @@ function storageGet(keys) {
   return new Promise(resolve => chrome.storage.local.get(keys, resolve));
 }
 
+function normalizeLocale(raw) {
+  // Normalise to e.g. "fr-FR", "en-GB" — lang lowercase, region uppercase
+  const [lang, region] = raw.split(/[-_]/);
+  return region ? `${lang.toLowerCase()}-${region.toUpperCase()}` : lang.toLowerCase();
+}
+
 function detectLocale() {
   const lang = document.documentElement.lang;
-  if (lang) return lang.split('-')[0].toLowerCase();
+  if (lang) return normalizeLocale(lang);
 
-  const pathMatch = window.location.pathname.match(/^\/([a-z]{2})(?:[-_][a-z]{2})?\//i);
-  if (pathMatch) return pathMatch[1].toLowerCase();
+  const pathMatch = window.location.pathname.match(/^\/([a-z]{2}(?:[-_][a-z]{2})?)\//i);
+  if (pathMatch) return normalizeLocale(pathMatch[1]);
 
   const p = new URLSearchParams(window.location.search);
   const qp = p.get('lang') || p.get('locale') || p.get('lng');
-  if (qp) return qp.split('-')[0].toLowerCase();
+  if (qp) return normalizeLocale(qp);
 
   return null;
 }

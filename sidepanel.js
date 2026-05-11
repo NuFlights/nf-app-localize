@@ -115,13 +115,39 @@ function unflattenObject(flat) {
 }
 
 const LOCALE_NAMES = {
-  fr: 'French', en: 'English', de: 'German', es: 'Spanish',
-  it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ja: 'Japanese',
-  zh: 'Chinese', ar: 'Arabic', ko: 'Korean', ru: 'Russian',
+  'fr': 'French',       'fr-FR': 'French (france)',    'fr-BE': 'French (Belgium)',
+  'en': 'English',      'en-GB': 'English (UK)',        'en-US': 'English (US)',
+  'de': 'German',       'de-DE': 'German (Germany)',
+  'es': 'Spanish',      'es-ES': 'Spanish (Spain)',
+  'it': 'Italian',      'nl': 'Dutch',
+  'pt': 'Portuguese',   'pt-BR': 'Portuguese (Brazil)',
+  'ja': 'Japanese',     'zh': 'Chinese',
+  'ar': 'Arabic',       'ko': 'Korean',   'ru': 'Russian',
 };
 
 function getLocaleName(code) {
-  return code ? (LOCALE_NAMES[code] || code.toUpperCase()) : 'Unknown';
+  if (!code) return 'Unknown';
+  return LOCALE_NAMES[code] || LOCALE_NAMES[code.split('-')[0]] || code.toUpperCase();
+}
+
+// Maps short locale codes to the full regional code used in the file structure.
+const LOCALE_REGION_MAP = {
+  'fr': 'fr-FR',
+  'en': 'en-GB',
+  'de': 'de-DE',
+  'es': 'es-ES',
+  'pt': 'pt-BR',
+};
+
+// Builds the translation file URL from origin + locale code.
+// Short codes are expanded via LOCALE_REGION_MAP before building the path.
+// e.g. fr   → {origin}/locales/fr-FR/fr.json
+//      fr-FR → {origin}/locales/fr-FR/fr.json
+//      en-GB → {origin}/locales/en-GB/en.json
+function localeToUrl(origin, locale) {
+  const fullLocale = LOCALE_REGION_MAP[locale] || locale;
+  const langCode   = fullLocale.split('-')[0].toLowerCase();
+  return `${origin}/locales/${fullLocale}/${langCode}.json`;
 }
 
 const STATUS_LABELS = { pending: 'Pending', suggested: 'Suggested', needs_review: 'Flagged' };
@@ -161,7 +187,7 @@ function setupStartScreen(locale, origin) {
   if (!locale)              { showState(stNoLocale);  return; }
 
   localeName.textContent = `${getLocaleName(locale)} (${locale})`;
-  fetchUrl.textContent   = `${origin}/locales/${locale}.json`;
+  fetchUrl.textContent   = localeToUrl(origin, locale);
   showState(stReady);
 }
 
@@ -170,8 +196,8 @@ async function activateSession(flat) {
   await storageSet({ translations: flat });
 
   // Also try to fetch English source in the background (non-blocking)
-  if (currentOrigin && currentOrigin !== 'file://' && currentLocale && currentLocale !== 'en') {
-    fetch(`${currentOrigin}/locales/en.json`)
+  if (currentOrigin && currentOrigin !== 'file://' && currentLocale && !currentLocale.startsWith('en')) {
+    fetch(localeToUrl(currentOrigin, 'en-GB'))
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (json) {
@@ -189,7 +215,7 @@ async function activateSession(flat) {
   });
 
   if (currentLocale) {
-    localePill.textContent = `${getLocaleName(currentLocale)} · ${currentLocale.toUpperCase()}`;
+    localePill.textContent = currentLocale;
     show(localePill);
   }
   show(btnToggleNav);
@@ -305,7 +331,7 @@ document.querySelectorAll('.tab-btn').forEach(btn =>
 
 $('btnStart').addEventListener('click', async () => {
   if (!currentLocale || !currentOrigin) return;
-  const url = `${currentOrigin}/locales/${currentLocale}.json`;
+  const url = localeToUrl(currentOrigin, currentLocale);
   fetchingUrl.textContent = url;
   showState(stFetching);
 
@@ -315,7 +341,7 @@ $('btnStart').addEventListener('click', async () => {
     const json = await res.json();
     await activateSession(flattenObject(json));
   } catch {
-    errorMsg.textContent = `Could not load translations from:\n${currentOrigin}/locales/${currentLocale}.json`;
+    errorMsg.textContent = `Could not load translations from:\n${url}`;
     showState(stError);
   }
 });
