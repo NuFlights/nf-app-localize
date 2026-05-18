@@ -9,3 +9,5 @@ chrome.runtime.onInstalled.addListener(() => {
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch(console.error);
 });
+
+//  run this command to create the new build python3 build.py

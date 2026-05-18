@@ -215,7 +215,7 @@ async function activateSession(flat) {
   });
 
   if (currentLocale) {
-    localePill.textContent = currentLocale;
+    localePill.textContent = currentLocale.toUpperCase();
     show(localePill);
   }
   show(btnToggleNav);
