@@ -1,18 +1,18 @@
 'use strict';
 
-let sessionActive  = false;
+let sessionActive    = false;
 let interceptEnabled = true;
-let selectedElement = null;
-let elements       = [];   // ordered list of all attached i18n elements in the DOM
-let currentIndex   = -1;
+let selectedElement  = null;
+let elements         = [];
+let currentIndex     = -1;
 let translationsCache = {};
+let reverseMap        = {};  // { translationValue → i18n key } for value/attr-based matching
 
 function storageGet(keys) {
   return new Promise(resolve => chrome.storage.local.get(keys, resolve));
 }
 
 function normalizeLocale(raw) {
-  // Normalise to e.g. "fr-FR", "en-GB" — lang lowercase, region uppercase
   const [lang, region] = raw.split(/[-_]/);
   return region ? `${lang.toLowerCase()}-${region.toUpperCase()}` : lang.toLowerCase();
 }
@@ -60,20 +60,93 @@ function attachEl(el) {
 }
 
 function rebuildElements() {
-  // Maintain DOM order
   elements = Array.from(document.querySelectorAll('[data-i18n][data-trt-attached="1"]'));
+}
+
+// ── Value-based fallback scans ────────────────────────────────────────────────
+// Strategy 1: match visible text content
+// Strategy 2: match HTML attributes (placeholder, title, aria-label, …)
+
+const WATCHED_ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-tooltip'];
+
+function buildReverseMap(cache) {
+  reverseMap = {};
+  for (const [key, value] of Object.entries(cache)) {
+    if (!value) continue;
+    const norm = value.trim();
+    if (norm && !reverseMap[norm]) reverseMap[norm] = key;
+  }
+}
+
+function scanByValue(root) {
+  if (!Object.keys(reverseMap).length) return;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node;
+
+  while ((node = walker.nextNode())) {
+    const text = node.textContent.trim();
+    if (!text || text.length < 2) continue;
+
+    const key = reverseMap[text];
+    if (!key) continue;
+
+    const el = node.parentElement;
+    if (!el) continue;
+    if (el.dataset.i18n || el.dataset.trtAttached === '1' || el.children.length > 0) continue;
+    if (el.textContent.trim() !== text) continue;
+
+    el.dataset.i18n         = key;
+    el.dataset.trtSynthetic = '1';
+    attachEl(el);
+  }
+
+  rebuildElements();
+}
+
+function scanByAttr(root) {
+  if (!Object.keys(reverseMap).length) return;
+
+  const els = root === document.documentElement
+    ? Array.from(document.querySelectorAll('*'))
+    : [root, ...root.querySelectorAll('*')];
+
+  for (const el of els) {
+    if (el.dataset.trtAttached === '1') continue;
+
+    for (const attr of WATCHED_ATTRS) {
+      const val = el.getAttribute(attr);
+      if (!val) continue;
+      const text = val.trim();
+      if (!text || text.length < 2) continue;
+      const key = reverseMap[text];
+      if (!key) continue;
+
+      el.dataset.i18n         = key;
+      el.dataset.trtAttr      = attr;
+      el.dataset.trtSynthetic = '1';
+      attachEl(el);
+      break;
+    }
+  }
+
+  rebuildElements();
+}
+
+function runAllScans(root) {
+  scanAndAttach(root);
+  scanByValue(root);
+  scanByAttr(root);
 }
 
 // ── Click handler ─────────────────────────────────────────────────────────────
 
 function onClick(e) {
-  if (!interceptEnabled) return; // navigate mode — let the app handle clicks
+  if (!interceptEnabled) return;
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
-
-  const el = e.currentTarget;
-  selectElement(el);
+  selectElement(e.currentTarget);
 }
 
 function selectElement(el) {
@@ -85,11 +158,18 @@ function selectElement(el) {
   const idx = elements.indexOf(el);
   if (idx !== -1) currentIndex = idx;
 
+  // For attribute-matched elements, read the attribute value as the current text
+  const attrName   = el.dataset.trtAttr || null;
+  const currentText = attrName
+    ? (el.getAttribute(attrName) || '').trim()
+    : el.textContent.trim();
+
   chrome.runtime.sendMessage({
     type: 'ELEMENT_SELECTED',
     data: {
       key: el.dataset.i18n,
-      currentText: el.textContent.trim(),
+      currentText,
+      attrName,
       referenceTranslation: translationsCache[el.dataset.i18n] || '',
       url: window.location.href,
       timestamp: Date.now(),
@@ -121,10 +201,12 @@ function navigateTo(idx) {
 
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.type === 'START_SESSION') {
-    if (msg.translations) translationsCache = msg.translations;
+    if (msg.translations) {
+      translationsCache = msg.translations;
+      buildReverseMap(translationsCache);
+    }
     sessionActive = true;
-    scanAndAttach(document.documentElement);
-    // Auto-open first element
+    runAllScans(document.documentElement);
     if (elements.length > 0) navigateTo(0);
   }
 
@@ -138,15 +220,20 @@ chrome.runtime.onMessage.addListener(msg => {
   }
 
   if (msg.type === 'RESET_SESSION') {
-    sessionActive = false;
+    sessionActive    = false;
     interceptEnabled = true;
     document.documentElement.classList.remove('trt-navigate-mode');
-    elements = [];
+    elements     = [];
     currentIndex = -1;
     selectedElement = null;
     document.querySelectorAll('[data-trt-attached="1"]').forEach(el => {
       el.classList.remove('trt-i18n-element', 'trt-i18n-hover', 'trt-i18n-selected');
       delete el.dataset.trtAttached;
+      delete el.dataset.trtAttr;
+      if (el.dataset.trtSynthetic) {
+        delete el.dataset.i18n;
+        delete el.dataset.trtSynthetic;
+      }
     });
   }
 
@@ -154,12 +241,9 @@ chrome.runtime.onMessage.addListener(msg => {
     const skipSet = new Set(msg.skipKeys || []);
     const step = msg.direction === 'next' ? 1 : -1;
     let idx = currentIndex + step;
-
-    // Skip already-reviewed keys
     while (idx >= 0 && idx < elements.length && skipSet.has(elements[idx].dataset.i18n)) {
       idx += step;
     }
-
     navigateTo(idx);
   }
 });
@@ -169,6 +253,7 @@ chrome.runtime.onMessage.addListener(msg => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.translations) {
     translationsCache = changes.translations.newValue || {};
+    buildReverseMap(translationsCache);
   }
 });
 
@@ -178,7 +263,7 @@ new MutationObserver(mutations => {
   for (const { addedNodes } of mutations) {
     for (const node of addedNodes) {
       if (node.nodeType === Node.ELEMENT_NODE) {
-        scanAndAttach(node);
+        runAllScans(node);
         added = true;
       }
     }
@@ -188,7 +273,7 @@ new MutationObserver(mutations => {
 
 init();
 
-// Watch for <html lang="..."> changes (SPA locale switching via attribute)
+// Watch for <html lang="..."> changes (SPA locale switching)
 new MutationObserver(mutations => {
   for (const m of mutations) {
     if (m.attributeName === 'lang') {
@@ -200,7 +285,7 @@ new MutationObserver(mutations => {
   }
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 
-// Watch for URL changes (SPA navigation via pushState / replaceState / popstate)
+// Watch for URL changes (SPA pushState / replaceState / popstate)
 let _lastHref = location.href;
 
 function checkUrlChange() {

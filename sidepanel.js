@@ -409,6 +409,9 @@ function showReviewForm(el) {
 
   rvKey.textContent         = el.key;
   rvCurrentText.textContent = el.currentText;
+  $('rvCurrentLabel').textContent = el.attrName
+    ? `🏷 ${el.attrName} (attribute)`
+    : '🇫🇷 Current text on page';
 
   // English source
   const enText = englishTranslations[el.key] || '';
